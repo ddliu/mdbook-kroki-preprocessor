@@ -70,6 +70,7 @@ mod diagram;
 use anyhow::{Result, anyhow, bail};
 use mdbook::preprocess::{Preprocessor, PreprocessorContext};
 use mdbook::book::{Book, BookItem, Chapter};
+use phf::phf_map;
 use std::sync::Arc;
 use pulldown_cmark::{Parser, CowStr, Tag, LinkType, Event, CodeBlockKind, Options};
 use pulldown_cmark_to_cmark::cmark;
@@ -85,10 +86,50 @@ fn main() {
 
 pub struct KrokiPreprocessor;
 
+static TYPES: phf::Map<&'static str, &'static str> = phf_map!{
+    "blockdiag" => "BlockDiag",
+    "bpmn" => "BPMN",
+    "bytefield" => "Bytefield",
+    "seqdiag" => "SeqDiag",
+    "actdiag" => "ActDiag",
+    "nwdiag" => "NwDiag",
+    "packetdiag" => "PacketDiag",
+    "rackdiag" => "RackDiag",
+    "c4plantuml" => "C4",
+    "ditaa" => "Ditaa",
+    "erd" => "Erd",
+    "excalidraw" => "Excalidraw",
+    "graphviz" => "GraphViz",
+    "mermaid" => "Mermaid",
+    "nomnoml" => "Nomnoml",
+    "pikchr" => "Pikchr",
+    "plantuml" => "PlantUML",
+    "structurizr" => "Structurizr",
+    "svgbob" => "Svgbob",
+    "vega" => "Vega",
+    "vegalite" => "Vega",
+    "wavedrom" => "WaveDrom",
+};
+
+fn is_type_match(t: &str) -> bool {
+    if TYPES.contains_key(t) {
+        return  true;
+    }
+
+    for k in TYPES.keys().into_iter() {
+        if t.starts_with(k) {
+            return  true;
+        }
+    }
+
+    false
+}
+
 impl Preprocessor for KrokiPreprocessor {
     fn name(&self) -> &'static str {
         "kroki-preprocessor"
     }
+
 
     fn run(&self, ctx: &PreprocessorContext, mut book: Book) -> Result<Book> {
         let endpoint = if let Some(config) = ctx.config.get_preprocessor(self.name()) {
@@ -174,9 +215,9 @@ fn parse_and_replace(chapter: &mut Chapter, indices: &Vec<usize>) -> Result<Vec<
                 e
             },
             Event::Start(Tag::Image(LinkType::Inline, ref url, _)) => {
-                if url.starts_with("kroki-") {
+                if is_type_match(url) {
                     if let Some(colon_index) = url.find(":") {
-                        let diagram_type = &url[6..colon_index];
+                        let diagram_type = &url[0..colon_index];
                         let path = &url[colon_index+1..];
 
                         state = ParserState::InImage;
@@ -203,8 +244,8 @@ fn parse_and_replace(chapter: &mut Chapter, indices: &Vec<usize>) -> Result<Vec<
                 Event::End(Tag::Paragraph)
             }
             Event::Start(Tag::CodeBlock(CodeBlockKind::Fenced(ref lang))) if state != ParserState::InPre => {
-                if lang.starts_with("kroki-") {
-                    let diagram_type = &lang[6..];
+                if is_type_match(lang) {
+                    let diagram_type = &lang;
                     state = ParserState::InCode(diagram_type.to_string());
                     Event::Start(Tag::Paragraph)
                 } else {
